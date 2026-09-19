@@ -1,21 +1,11 @@
 {
   "parallel": {
-    "group": {
-      "allowed": true,
-      "max_parallel": 3
-    },
-    "area": {
-      "allowed": true,
-      "max_parallel": 2
-    }
+    "max_parallel": 3
   },
   "retry": {
     "max_retries": 3
   },
   "job": {
     "pause_between_jobs": false
-  },
-  "worktree": {
-    "setup": []
   }
 }
