@@ -43,7 +43,7 @@ description: /lead 워크플로의 워크플로 스킬을 프로젝트의 .claud
 
 - 수정: 워크플로 스킬은 한 파일만 고치면 모든 에이전트에 함께 반영된다. `적용 대상`을 넓히면 다른 워크플로 스킬과 겹치지 않는지 다시 본다.
 - 기본 제공 스킬(`code-structure`, `doc-writing`)도 같은 방법으로 직접 고친다. CCForge를 다시 복사하면 덮어써지므로 고친 뒤 커밋해 두라고 사용자에게 알린다.
-- 삭제: 프로젝트의 `.claude/skills/<name>/`를 지운다. `.ccforge/workspace/*/*/job.json`에서 `status`가 `IN_PROGRESS`인 job의 `tasks/*.json` 중 `task.skills`에 그 경로가 있으면 미루거나 사용자 확인을 받는다. 적용 대상이 명세·문서인 워크플로 스킬이 하나도 남지 않게 되면 지우지 않는다(명세 단계가 막힌다).
+- 삭제: 프로젝트의 `.claude/skills/<name>/`를 지운다. `.claude/workspace/*/*/job.json`에서 `status`가 `IN_PROGRESS`인 job의 `tasks/*.json` 중 `task.skills`에 그 경로가 있으면 미루거나 사용자 확인을 받는다. 적용 대상이 명세·문서인 워크플로 스킬이 하나도 남지 않게 되면 지우지 않는다(명세 단계가 막힌다).
 
 ## 4. 확인하고 보고한다
 

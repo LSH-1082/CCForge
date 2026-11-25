@@ -30,7 +30,7 @@
 - **팀원끼리 직접 대화합니다.** 실행 팀원과 검토 팀원이 전원 PASS가 날 때까지 재작업 루프를 돌고, 헷갈리는 것은 분석원에게 직접 묻습니다. 팀장에게는 완료와 예외만 올라옵니다.
 - **요구가 잘못됐으면 사용자에게 돌아옵니다.** 구현이 불가능하거나 요구가 모호하면, 분석원이 대안을 정리하고 팀장이 "구체화할지, 다른 방식으로 갈지"를 묻습니다. 팀이 요구를 임의로 바꾸지 않습니다.
 - **실무처럼 커밋합니다.** 논리 단위, Conventional Commits(또는 팀 규약), 재작업은 fixup 후 autosquash. 병합은 fast-forward라 커밋이 그대로 남습니다.
-- **메인 작업 트리를 건드리지 않습니다.** 모든 작업은 `.ccforge/worktrees/`의 git worktree에서 하고, 끝나면 브랜치를 원격에 푸시합니다. PR 생성과 병합은 사용자 몫입니다.
+- **메인 작업 트리를 건드리지 않습니다.** 모든 작업은 `.claude/worktrees/`의 git worktree에서 하고, 끝나면 브랜치를 원격에 푸시합니다. PR 생성과 병합은 사용자 몫입니다.
 - **끊겨도 이어집니다.** 상태는 전부 파일과 git에 남아 `/lead resume`으로 이어갑니다.
 
 ## 빠른 시작
@@ -44,10 +44,10 @@ git clone <이 저장소> ccforge
 cd <프로젝트>
 mkdir -p .claude && cp -R ../ccforge/{agents,commands,protocols,skills,hooks} .claude/
 cp -Rn ../ccforge/rules .claude/      # 팀 규칙 본보기. 이미 있으면 덮어쓰지 않는다
-echo '.ccforge/' >> .gitignore
+printf '.claude/workspace/\n.claude/worktrees/\n' >> .gitignore
 ```
 
-**2. agent teams와 hook 켜기** — `<프로젝트>/.claude/settings.json`에 합칩니다.
+**2. agent teams, hook, auto 모드 켜기** — `<프로젝트>/.claude/settings.json`에 합칩니다.
 
 ```json
 {
@@ -55,6 +55,7 @@ echo '.ccforge/' >> .gitignore
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"
   },
+  "permissions": { "defaultMode": "auto" },
   "hooks": {
     "TaskCompleted": [{ "hooks": [{ "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/ccforge_check.py\" task-completed" }] }],
     "TeammateIdle":  [{ "hooks": [{ "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/ccforge_check.py\" teammate-idle" }] }]
@@ -112,8 +113,8 @@ echo '.ccforge/' >> .gitignore
 
 - **팀 규칙도 검증합니다.** 적용한 규칙마다 검토 팀원이 지켰는지 판정해 남기고, 검토가 빠뜨린 규칙 파일이 있으면 병합하지 않습니다.
 - **hook이 완료 조건을 강제합니다.** `TaskCompleted`는 검토 전원 PASS, 커밋되지 않은 변경 없음을 확인해야 완료를 허락합니다. `TeammateIdle`은 할 일이 남았는데 멈춘 팀원을 세 번까지 깨우고, 그래도 안 되면 팀장에게 넘깁니다.
-- **메시지가 아니라 파일로 판단합니다.** 모든 Result는 `.ccforge/workspace/`에 JSON으로 남고, step마다 `log.jsonl`에 순서대로 기록됩니다. 메시지 형식이 어긋나도 흐름이 깨지지 않습니다.
-- **`.claude/`에는 쓰지 않습니다.** Claude Code는 `.claude/` 아래를 보호 경로로 다뤄 쓰기마다 확인을 받습니다. 실행 상태는 전부 `.ccforge/`에 둡니다.
+- **메시지가 아니라 파일로 판단합니다.** 모든 Result는 `.claude/workspace/`에 JSON으로 남고, step마다 `log.jsonl`에 순서대로 기록됩니다. 메시지 형식이 어긋나도 흐름이 깨지지 않습니다.
+- **모든 것이 `.claude/` 안에 있습니다.** 정의·규칙·설정과 실행 중의 작업 기록(`workspace/`)·worktree(`worktrees/`)가 한 디렉터리에 모입니다. Claude Code는 `.claude/`를 보호 경로로 다루므로 **`auto` 권한 모드로 실행해야 합니다**(아래 [권한](#권한)).
 
 ## 명령어
 
@@ -167,7 +168,15 @@ echo '.ccforge/' >> .gitignore
 
 ### 권한
 
-무인으로 돌리려면 `.claude/settings.json`의 `permissions.allow`에 다음을 넣습니다. 테스트·빌드 명령은 프로젝트에 맞게 추가합니다.
+**`auto` 권한 모드가 필요합니다.** 작업 기록과 worktree가 `.claude/` 안에 있는데, Claude Code는 `.claude/`를 보호 경로로 다뤄 `default`·`acceptEdits` 모드에서는 쓰기마다 확인을 받습니다. 허용 규칙(`Edit(.claude/**)` 등)으로도 풀리지 않습니다. 실측 결과는 다음과 같습니다.
+
+| 모드 | `.claude/workspace` 쓰기 | `.claude/worktrees` |
+|---|---|---|
+| `default`, `acceptEdits` | 확인 필요(무인이면 거부) | 됨 |
+| `auto` | 됨 | 됨 |
+| `bypassPermissions` | 됨 | 됨 |
+
+`settings.json`의 `"defaultMode": "auto"`로 두거나, 세션에서 shift+tab으로 auto를 고릅니다. 그 밖에 자주 쓰는 도구는 `permissions.allow`에 넣어 둡니다. 테스트·빌드 명령은 프로젝트에 맞게 추가합니다.
 
 ```json
 ["Read", "Write", "Edit", "Glob", "Grep", "Agent", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet",
@@ -177,19 +186,17 @@ echo '.ccforge/' >> .gitignore
 ## 디렉터리 구조
 
 ```text
-<프로젝트>/
-├── .claude/                     # CCForge가 읽기만 하는 곳
-│   ├── commands/lead.md         # 팀장 절차 (/lead)
-│   ├── agents/                  # analysis · coder · reviewer
-│   ├── skills/                  # 워크플로 스킬 + builder + lead-resume · lead-branching
-│   ├── hooks/ccforge_check.py   # TaskCompleted · TeammateIdle
-│   ├── protocols/               # 에이전트·스킬 작성 규격
-│   ├── rules/common/            # 공통 팀 규칙
-│   ├── rules/<주제>/            # (선택) 영역별 팀 규칙
-│   └── lead.config.json         # (선택) 설정
-└── .ccforge/                    # 실행 중에 생기는 것 (.gitignore)
-    ├── workspace/<epic>/        # epic·job 상태, step별 Task·Result·로그
-    └── worktrees/<epic>/        # 통합 worktree, 팀원별 worktree
+<프로젝트>/.claude/
+├── commands/lead.md         # 팀장 절차 (/lead)
+├── agents/                  # analysis · coder · reviewer
+├── skills/                  # 워크플로 스킬 + builder + lead-resume · lead-branching
+├── hooks/ccforge_check.py   # TaskCompleted · TeammateIdle
+├── protocols/               # 에이전트·스킬 작성 규격
+├── rules/                   # 팀 규칙: common/, <주제>/, branch-convention.md
+├── lead.config.json         # (선택) 설정
+├── settings.json            # agent teams, hook, 권한 모드
+├── workspace/<epic>/        # 실행 기록: epic·job 상태, step별 Task·Result·로그 (.gitignore)
+└── worktrees/<epic>/        # 통합 worktree, 팀원별 worktree (.gitignore)
 ```
 
 ## FAQ
@@ -197,10 +204,10 @@ echo '.ccforge/' >> .gitignore
 <details>
 <summary><b><code>claude -p</code>(무인)로 돌릴 수 있나요?</b></summary>
 
-됩니다. 비대화형 세션에서는 agent teams가 팀원을 만들지 않으므로 자동으로 순차 방식으로 돕니다. 승인 단계에서 멈추지 않도록 `plan.require_approval: false`를 두고, 권한은 `--allowedTools`로 줍니다.
+됩니다. 비대화형 세션에서는 agent teams가 팀원을 만들지 않으므로 자동으로 순차 방식으로 돕니다. 승인 단계에서 멈추지 않도록 `plan.require_approval: false`를 두고, `.claude/` 쓰기가 막히지 않도록 `--permission-mode auto`로 실행합니다.
 
 ```bash
-claude -p "/lead <요구사항>" --permission-mode acceptEdits \
+claude -p "/lead <요구사항>" --permission-mode auto \
   --allowedTools "Read" "Write" "Edit" "Glob" "Grep" "Agent" "Bash(git *)" "Bash(python3 *)" "Bash(jq *)" "Bash(mkdir *)" "Bash(mv *)" "Bash(echo *)" "Bash(date *)"
 ```
 </details>

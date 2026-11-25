@@ -80,7 +80,7 @@ description: /lead 워크플로의 에이전트를 만들거나, 이미 있는 �
 ## 6. 삭제
 
 1. 그 유형의 기본 에이전트(대상을 한정하지 않은 것)면 다른 기본 에이전트가 없는 한 거절한다.
-2. `.ccforge/workspace/*/*/job.json`에서 `status`가 `IN_PROGRESS`인 job의 `steps/*/task.json` 중 `target`이나 `team.reviewers[].agent`가 그 이름인 것이 있으면 미루거나 사용자 확인을 받는다.
+2. `.claude/workspace/*/*/job.json`에서 `status`가 `IN_PROGRESS`인 job의 `steps/*/task.json` 중 `target`이나 `team.reviewers[].agent`가 그 이름인 것이 있으면 미루거나 사용자 확인을 받는다.
 3. `agents/<name>.md`를 지운다. 그 이름이 `agents/`, `protocols/`, `commands/`에 남지 않았는지 `grep`으로 확인한다.
 
 ## 7. 확인하고 보고한다
