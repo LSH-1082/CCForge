@@ -102,7 +102,7 @@ step Task의 `mode`가 `sequential`이거나 Task 없이 서브에이전트로 �
 
 - **메시지 규칙**: `task.commit_convention`의 파일이 있으면 그것을 따른다. 없으면 Conventional Commits: `<type>(<scope>): <subject>`. `type`은 `feat` / `fix` / `refactor` / `test` / `docs` / `chore` / `perf` / `build` / `ci` 중 하나, `scope`는 모듈 이름(생략 가능), `subject`는 명령형·현재형으로 50자 안팎, 끝에 마침표 없음. 무엇을 왜 바꿨는지가 subject로 부족하면 한 줄 띄우고 본문에 적는다(72자 줄바꿈). 저장소의 `git log`에 다른 관례가 분명하면 그것을 따른다.
 - **단위**: 커밋 하나에 논리적 변경 하나. 리팩터링과 기능 추가, 포맷 변경과 동작 변경을 섞지 않는다. 테스트는 그 테스트가 검증하는 코드와 같은 커밋에 넣는다. 각 커밋에서 빌드가 깨지지 않게 한다.
-- **하지 않는 것**: `wip`·`fix typo`·`update` 같은 의미 없는 메시지, 생성물·비밀·작업 파일(`.ccforge/workspace/` 등) 커밋, `--no-verify`, 강제 푸시와 다른 브랜치 조작.
+- **하지 않는 것**: `wip`·`fix typo`·`update` 같은 의미 없는 메시지, 생성물·비밀·작업 파일(`.claude/workspace/` 등) 커밋, `--no-verify`, 강제 푸시와 다른 브랜치 조작.
 - **재작업**: 앞 커밋을 고치는 수정은 `git commit --fixup=<고칠 커밋>`으로 남기고, 새로운 논리 변경이면 일반 커밋으로 한다. 검토가 모두 `PASS`한 뒤 `done`을 보내기 전에 `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash <base>`로 fixup을 합친다. 합친 뒤의 트리는 `PASS`받은 트리와 같아야 한다(`git diff <PASS 받은 HEAD> HEAD`가 비어 있음).
 - **병합 충돌**: `conflict`를 받으면 `git rebase <job 브랜치>`로 충돌을 풀고 `git rebase --continue`한다. 커밋 메시지는 그대로 둔다.
 

@@ -8,10 +8,10 @@ user-invocable: false
 
 팀원은 복구되지 않는다. 파일과 git으로 상태를 맞춘 뒤 필요한 팀원을 새로 만든다. 기록보다 저장소의 실제 상태를 믿는다.
 
-1. `epic_id`가 없으면 `.ccforge/workspace/*/epic.json` 중 `COMPLETED`가 아닌 것을 찾아 하나면 그것, 여럿이면 사용자가 고르게 한다.
+1. `epic_id`가 없으면 `.claude/workspace/*/epic.json` 중 `COMPLETED`가 아닌 것을 찾아 하나면 그것, 여럿이면 사용자가 고르게 한다.
 2. `schema_version`이 `7`이 아니면 복구하지 않고 "남은 작업은 새 epic으로 요청하라"고 알린다.
 3. `PLANNING`이면 `lead.md` §2부터, `AWAITING_APPROVAL`이면 §4의 보고·승인부터 다시 한다.
-4. 통합 worktree(`.ccforge/worktrees/<epic_id>/integration`)가 없으면 진행 중인 job 브랜치로 다시 만든다. 있으면 그 job 브랜치가 체크아웃되어 있는지 확인한다.
+4. 통합 worktree(`.claude/worktrees/<epic_id>/integration`)가 없으면 진행 중인 job 브랜치로 다시 만든다. 있으면 그 job 브랜치가 체크아웃되어 있는지 확인한다.
 5. 진행 중인 job의 step마다:
    - `MERGED`: 그대로 둔다. `job.json`에는 아니라고 되어 있어도 step 브랜치의 끝이 이미 job 브랜치에 들어가 있으면(`git merge-base --is-ancestor <step 브랜치> <job 브랜치>`) `MERGED`로 고친다.
    - step의 `log.jsonl` 마지막 round에서 `team.reviewers` 전원이 `PASS`이고 그 `workdir`에 커밋되지 않은 변경이 없으면: §7 병합부터.

@@ -20,7 +20,7 @@ SUBJECT = re.compile(r"^ccforge:(?P<epic>[^/]+)/(?P<job>[^/]+)/step-(?P<step>\d+
 
 def workspace():
     root = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
-    return os.path.join(root, ".ccforge", "workspace")
+    return os.path.join(root, ".claude", "workspace")
 
 
 def load(path, default=None):

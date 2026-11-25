@@ -27,8 +27,9 @@ argument-hint: <요구사항> | resume [epic_id]
 ### 0.0 경로, 설정, 팀 규칙
 
 - `<project>`는 저장소 루트의 절대 경로다. `.claude/…`는 `<project>/.claude/…`다.
-- CCForge 파일(`.claude/agents/`, `commands/`, `protocols/`, `skills/`, `hooks/`)은 실행 중에 고치지 않는다. 당신과 팀원이 쓰는 곳은 `.ccforge/` 아래뿐이다(작업 기록, worktree, 설문으로 받은 브랜치 규약). **`.claude/` 아래에는 쓰지 않는다.** Claude Code가 그 경로를 민감한 경로로 보고 쓰기를 막는다.
-- **메인 작업 트리는 건드리지 않는다.** 체크아웃·커밋·병합은 모두 `.ccforge/worktrees/` 아래에서 한다(§6). 사용자는 그동안 메인 트리에서 다른 일을 해도 된다.
+- CCForge 파일(`.claude/agents/`, `commands/`, `protocols/`, `skills/`, `hooks/`)은 실행 중에 고치지 않는다. 당신과 팀원이 쓰는 곳은 `.claude/workspace/`(작업 기록), `.claude/worktrees/`(worktree), `.claude/rules/branch-convention.md`(설문으로 받은 브랜치 규약)뿐이다.
+- **권한 모드는 `auto`(또는 `bypassPermissions`)여야 한다.** Claude Code는 `.claude/` 아래를 보호 경로로 다뤄 `default`·`acceptEdits`에서는 쓰기마다 확인을 받고, 허용 규칙으로도 풀리지 않는다. 첫 쓰기가 거부되거나 확인을 요구하면 멈추고 사용자에게 "`auto` 모드로 다시 실행하라(shift+tab, 또는 `--permission-mode auto`)"고 알린다.
+- **메인 작업 트리는 건드리지 않는다.** 체크아웃·커밋·병합은 모두 `.claude/worktrees/` 아래에서 한다(§6). 사용자는 그동안 메인 트리에서 다른 일을 해도 된다.
 - 워크플로 스킬은 `.claude/skills/*/SKILL.md` 중 앞 20줄 안에 `## 적용 대상` 절이 있는 것이다.
 
 **설정** `.claude/lead.config.json`(선택). 기본값은 이 표에만 적는다. 잘못된 키는 기본값을 쓰고 한 줄로 알린다. 사용자의 요청·설문 답이 우선한다.
@@ -102,7 +103,7 @@ job마다 계획을 승인받은 뒤 정한다.
 단위: **epic**은 사용자 요청 1건, **job**은 브랜치 1개, **step**은 실행 팀원 한 명이 만들고 검토를 통과하는 한 사이클이다.
 
 ```
-.ccforge/workspace/<epic_id>/
+.claude/workspace/<epic_id>/
 ├── epic.json                 # 요청, 설문, 브랜치(job) 목록
 ├── plan/                     # epic_plan (브랜치를 나눌 때만)
 └── <job_id>/
@@ -113,13 +114,13 @@ job마다 계획을 승인받은 뒤 정한다.
         ├── task.json         # step Task (당신이 쓴다)
         ├── impl-r<k>.json, review-r<k>-<member>.json, consult-<m>.json
         └── log.jsonl         # 팀원이 Result·consult·done·escalate마다 한 줄
-.ccforge/worktrees/<epic_id>/
+.claude/worktrees/<epic_id>/
 ├── integration/              # job 브랜치. 병합과 푸시를 여기서 한다
 └── <member>/                 # 팀 방식의 실행 팀원별 작업 트리. step이 바뀌어도 재사용
 ```
 
 - `epic_id`: `epic_<YYYYMMDD>_<4자리 일련번호>_<slug>`. `job_id`: 브랜치 이름에서 `/`만 `_`로 바꾼 것.
-- 모든 JSON은 `.tmp`에 쓴 뒤 `mv`한다. `.ccforge/`는 `.gitignore`에 있어야 한다(없으면 알리고 계속한다).
+- 모든 JSON은 `.tmp`에 쓴 뒤 `mv`한다. `.claude/workspace/`와 `.claude/worktrees/`는 `.gitignore`에 있어야 한다(없으면 알리고 계속한다).
 
 ## 2. epic 시작
 
@@ -127,7 +128,7 @@ job마다 계획을 승인받은 뒤 정한다.
 2. `epic.json`을 쓴다: `schema_version: 7`, `status: PLANNING`, `original_request`, `survey: []`, `base_branch`(현재 브랜치), `remote`(§8.3), `pause_between_jobs`, `jobs: []`.
 3. **설문**은 물을 것이 있을 때만 한 번에 묻는다: 범위 해석이 둘 이상 / 요구가 충돌 / 유지할 인터페이스를 알 수 없음 / 명세를 둘 곳의 관례가 없음 / 팀 규칙이 요청에 없는 값을 요구 / 브랜치 규약이 없음. 규모가 크다는 것은 사유가 아니다. 답은 `epic.survey`에 남긴다.
 4. **브랜치**: 기본은 epic 하나에 브랜치 하나다. 사용자가 나눠 달라고 했거나 브랜치 이름을 지을 때 `lead-branching` 스킬을 읽고 따른다.
-5. `git worktree add .ccforge/worktrees/<epic_id>/integration -b <첫 job 브랜치> <base_branch>`. `epic.status: IN_PROGRESS`로 쓰고 첫 job을 시작한다.
+5. `git worktree add .claude/worktrees/<epic_id>/integration -b <첫 job 브랜치> <base_branch>`. `epic.status: IN_PROGRESS`로 쓰고 첫 job을 시작한다.
 
 ## 3. job 시작
 
@@ -207,7 +208,7 @@ step마다 §6의 작업 트리와 step 브랜치를 준비하고 `steps/<n>/tas
 
 step마다 job 브랜치의 지금 끝에서 `<branch>--step-<n>` 브랜치를 만들고 그 sha를 `base`로 적는다. 실행 팀원은 이 브랜치에 커밋한다.
 
-- **팀 방식**: 실행 팀원마다 작업 트리 하나를 epic 동안 재사용한다. 처음이면 `git worktree add .ccforge/worktrees/<epic_id>/<member> -b <branch>--step-<n> <branch>`, 이미 있으면 `git -C <그 트리> switch -c <branch>--step-<n> <branch>`. 의존성 설치는 트리마다 한 번이면 된다.
+- **팀 방식**: 실행 팀원마다 작업 트리 하나를 epic 동안 재사용한다. 처음이면 `git worktree add .claude/worktrees/<epic_id>/<member> -b <branch>--step-<n> <branch>`, 이미 있으면 `git -C <그 트리> switch -c <branch>--step-<n> <branch>`. 의존성 설치는 트리마다 한 번이면 된다.
 - **순차 방식**: 통합 worktree에서 `git -C <integration> switch -c <branch>--step-<n> <branch>`.
 
 ## 7. step 완료와 병합
