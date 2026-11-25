@@ -41,7 +41,12 @@ argument-hint: <요구사항> | resume [epic_id]
 | `job.pause_between_jobs` | `false` | 브랜치(job) 하나가 끝날 때마다 멈추고 `resume`을 기다린다 |
 | `plan.require_approval` | `true` | 구현 계획을 보고하고 승인을 받은 뒤 실행한다. `false`면 보고만 하고 바로 실행한다(무인 실행용) |
 
-**팀 규칙** `.claude/rules/*.md`를 내용으로 읽는다. 브랜치 이름 규칙은 당신이 따른다(`lead-branching` 스킬). 커밋 메시지 규칙이 있는 파일은 경로를 step Task의 `task.commit_convention`에, 그 밖의 규칙 파일은 모든 Task의 `task.constraints`에 "`<경로>`를 따른다"로 넣는다. 규칙을 따를 수 없으면 기본 동작으로 하고 알린다.
+**팀 규칙** `.claude/rules/`는 두 층이다.
+
+- `rules/common/*.md`: 모든 step에 적용하는 공통 규칙(`README.md`가 본문).
+- `rules/<주제>/*.md`: 그 디렉터리 `README.md`의 `## 적용 대상`(파일 패턴)에 바뀌는 파일이 하나라도 해당하는 step에만 적용. 이 절이 없으면 모든 step에 적용한다. 이름이 `_`로 시작하는 디렉터리는 예시라 적용하지 않는다.
+- 브랜치 이름·커밋 메시지 규칙은 어느 파일에 있든 내용으로 찾는다. 브랜치 이름은 당신이 따르고(`lead-branching` 스킬), 커밋 메시지 규칙이 있는 파일은 `task.commit_convention`에 넣는다.
+- step마다 적용할 규칙 파일의 절대 경로를 `task.rules`에 넣는다(공통 + 해당 주제). 실행 팀원은 지키고, 검토 팀원은 규칙마다 지켰는지 `rules_check`로 남긴다. 규칙을 읽을 수 없으면 기본 동작으로 하고 알린다.
 
 ### 0.1 컨텍스트 절약
 
@@ -180,6 +185,7 @@ step마다 §6의 작업 트리와 step 브랜치를 준비하고 `steps/<n>/tas
   "task": {
     "goal": "<job의 goal>", "instructions": "<plan[step]의 내용>",
     "constraints": [], "acceptance_criteria": [],
+    "rules": ["<project>/.claude/rules/common/README.md", "<project>/.claude/rules/<주제>/<파일>.md"],
     "files": ["<plan[step].files>"],
     "workdir": "<작업 트리 절대 경로>", "branch": "<step 브랜치>", "base": "<시작 커밋 sha>",
     "commit_convention": "<규칙 파일 경로 | null>",
@@ -206,7 +212,7 @@ step마다 job 브랜치의 지금 끝에서 `<branch>--step-<n>` 브랜치를 �
 
 ## 7. step 완료와 병합
 
-`done`이 오면 `python3 .claude/hooks/ccforge_check.py check-done <step 디렉터리>`를 실행한다. `OK`가 아니면 그 이유를 실행 팀원에게 돌려보낸다(팀 방식에서는 `TaskCompleted` hook이 이미 막아 준다).
+`done`이 오면 `python3 .claude/hooks/ccforge_check.py check-done <step 디렉터리>`를 실행한다. `OK`가 아니면 그 이유를 실행 팀원에게 돌려보낸다(팀 방식에서는 `TaskCompleted` hook이 이미 막아 준다). `task.rules`가 있으면 기본 검토 Result의 `rules_check`가 그 파일을 모두 다뤘는지도 본다(`jq '[.payload.rules_check[].file] | unique'`). 빠졌으면 그 검토 팀원에게 빠진 규칙 파일을 알려 같은 round를 다시 검토하게 한다.
 
 병합은 커밋을 그대로 살린다. squash하지 않고 당신이 커밋을 만들지 않는다.
 
