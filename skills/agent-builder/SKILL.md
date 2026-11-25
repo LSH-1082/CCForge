@@ -1,11 +1,11 @@
 ---
 name: agent-builder
-description: /orchestrate 워크플로의 에이전트를 만들거나, 이미 있는 에이전트 정의 파일을 CCForge에 편입하거나, 기존 에이전트를 확장·삭제한다. "에이전트 만들어줘", "이 에이전트 파일을 워크플로에 붙여줘", "규격에 맞춰줘", "reviewer가 스킬을 쓰는 방식을 바꿔줘", "에이전트 지워줘" 같은 요청에 쓴다. 에이전트는 분석형·실행형·검증형 세 유형 중 하나이고 정의 파일(agents/<name>.md) 하나로 등록된다. 새 산출물 종류나 검증 관점은 에이전트가 아니라 워크플로 스킬이다(skill-builder).
+description: /lead 워크플로의 에이전트를 만들거나, 이미 있는 에이전트 정의 파일을 CCForge에 편입하거나, 기존 에이전트를 확장·삭제한다. "에이전트 만들어줘", "이 에이전트 파일을 워크플로에 붙여줘", "규격에 맞춰줘", "reviewer가 스킬을 쓰는 방식을 바꿔줘", "에이전트 지워줘" 같은 요청에 쓴다. 에이전트는 분석형·실행형·검증형 세 유형 중 하나이고 정의 파일(agents/<name>.md) 하나로 등록된다. 새 산출물 종류나 검증 관점은 에이전트가 아니라 워크플로 스킬이다(skill-builder).
 ---
 
 # 에이전트 만들기·편입하기
 
-기준은 `protocols/task-result.md` 3.3(유형과 값)과 3.3.1(정의 파일과 선택)이고, 정의 파일의 형식은 기본 제공 `agents/analysis.md`, `agents/coder.md`, `agents/reviewer.md`가 본보기다. 이 문서는 절차만 적는다. 두 곳이 다르면 `protocols/`를 따른다.
+기준은 `protocols/task-result.md`(유형과 값, 정의 파일, payload 공통 필드)이고, 정의 파일의 형식은 기본 제공 `agents/analysis.md`, `agents/coder.md`, `agents/reviewer.md`가 본보기다. 정의 파일은 그것만 읽고 작업할 수 있게 완결되어야 한다(다른 문서를 가리키지 않는다).
 
 ## 0. 경로
 
@@ -13,7 +13,7 @@ description: /orchestrate 워크플로의 에이전트를 만들거나, 이미 �
 
 ## 1. 모드를 정한다
 
-먼저 `agents/*.md` 전부와 `protocols/task-result.md` 3.3·3.3.1을 읽는다. 읽지 않고 쓰지 않는다.
+먼저 `agents/*.md` 전부와 `protocols/task-result.md`를 읽는다. 읽지 않고 쓰지 않는다.
 
 | 요청 | 모드 |
 |---|---|
@@ -38,7 +38,7 @@ description: /orchestrate 워크플로의 에이전트를 만들거나, 이미 �
 
 - 달라지는 것이 산출물 종류나 규칙 목록뿐이면 에이전트를 만들지 않는다. 워크플로 스킬(`skill-builder`)로 푼다. 검증 관점을 더하는 것도 `검증 방식: 관점 검증`인 워크플로 스킬이다.
 - 달라지는 것이 언어·도구·명령뿐이면 프로젝트의 `CLAUDE.md`에 적는다.
-- 다른 도구·모델·절차가 필요하면(외부 도구로 하는 취약점 검사, 성능 측정, 특정 산출물에만 쓰는 별도 모델 등) 에이전트를 만든다. `description` 첫 문장에 **맡는 대상**을 좁게 적는다. Orchestrator는 그 대상이 이번 Task에 맞을 때 기본 에이전트 대신(검증형은 기본 검증과 함께) 이 에이전트를 고른다.
+- 다른 도구·모델·절차가 필요하면(외부 도구로 하는 취약점 검사, 성능 측정, 특정 산출물에만 쓰는 별도 모델 등) 에이전트를 만든다. `description` 첫 문장에 **맡는 대상**을 좁게 적는다. Lead는 그 대상이 이번 Task에 맞을 때 기본 에이전트 대신(검증형은 기본 검증과 함께) 이 에이전트를 고른다.
 
 편입 대상이 기본 에이전트로 되는 일이면 그 파일의 고유한 규칙만 뽑아 워크플로 스킬이나 기존 에이전트의 확장으로 옮기자고 제안한다.
 
@@ -46,25 +46,24 @@ description: /orchestrate 워크플로의 에이전트를 만들거나, 이미 �
 
 ## 3. 생성
 
-결정한 내용을 표(유형, 맡는 대상, `request_type`·`status`·`blocked.type`은 유형의 값 그대로, payload 키, tools·model)로 만들어 사용자 확인을 받은 뒤 정의 파일을 쓴다. 등록은 파일 하나로 끝난다. Orchestrator는 epic을 시작할 때 `agents/*.md`를 읽어 목록을 만들므로 `protocols/`와 `commands/orchestrate.md`는 고치지 않는다.
+결정한 내용을 표(유형, 맡는 대상, `status`·`blocked.type`은 유형의 값 그대로, payload 키, tools·model)로 만든다. 대상을 한정한 검증형은 기본 검토와 함께 팀원 자리를 하나 더 쓰므로 `model: sonnet`을 기본으로 하고, 그 검사에 더 강한 모델이 꼭 필요할 때만 바꾼다. 사용자 확인을 받은 뒤 정의 파일을 쓴다. 등록은 파일 하나로 끝난다. Lead는 epic을 시작할 때 `agents/*.md`를 읽어 목록을 만들므로 `protocols/`와 `commands/lead.md`는 고치지 않는다.
 
-**`agents/<name>.md`** — 기본 제공 정의 파일과 같은 절 구성으로 쓴다: `역할` → `핵심 원칙` → `프로토콜 (요약)` → (`request_type`별 수행 내용) → `수행 절차` → (검증형: `판정 규칙 (요약)`) → `스킬`.
+**`agents/<name>.md`** — 기본 제공 정의 파일과 같은 절 구성으로 쓴다: `역할` → `핵심 원칙` → `팀 대화`(받는 메시지와 하는 일, 보내는 메시지) → `Result` → `수행 절차` → (검증형: `판정 규칙`) → `스킬`.
 
-- frontmatter: `name` = 파일명, `type` = 유형 값, `description` 첫 문장 = 맡는 대상(기본 에이전트가 아니므로 한정해서 적는다), 이어서 Task/Result 경로 문장. `tools`에 `Read`·`Write`·`Bash`(tmp→mv 때문), 실행형만 `Edit`. 분석형·검증형에는 `Edit`를 넣지 않는다.
-- `프로토콜 (요약)` 불릿 순서: `request_type` → `status` → `blocked.type` → `payload` 주요 항목 → Result 봉투 여덟 필드를 모두 적은 줄 → 상태 불변식 → tmp→mv → 멱등성 → History 금지. 그 뒤에 `protocols/` 참조 표. 값은 `task-result.md` 3.3의 그 유형 행을 그대로 옮긴다. 새 값을 만들지 않는다.
-- `payload` 주요 항목에는 `payload.md` 3.5의 그 유형 공통 필드를 반드시 넣고, 그 밖의 항목을 더한다. Orchestrator는 공통 필드만 읽는다.
+- frontmatter: `name` = 파일명, `type` = 유형 값, `description` 첫 문장 = 맡는 대상(기본 에이전트가 아니므로 한정해서 적는다), 이어서 Task/Result 경로 문장. `tools`에 `Read`·`Write`·`Bash`(tmp→mv 때문)와 `SendMessage`(팀원으로 돌 때 보고), 실행형만 `Edit`과 `TaskGet`·`TaskList`·`TaskUpdate`(step 작업 완료 표시). 분석형·검증형에는 `Edit`를 넣지 않는다.
+- `팀 대화` 절은 같은 유형의 기본 제공 정의 파일의 표를 그대로 옮긴다(메시지 종류와 보내는 상대는 `task-result.md` 2절). `Result` 절 불릿 순서: `status` → `blocked.type` → `payload` 주요 항목 → Result 봉투 아홉 필드 줄 → 상태 불변식. 그 뒤에 `payload` 예시 JSON 하나. 값은 `task-result.md` 4절의 그 유형 행을 그대로 옮긴다. 새 값을 만들지 않는다.
+- `payload` 주요 항목에는 `task-result.md` 5절의 그 유형 공통 필드를 반드시 넣고, 그 밖의 항목을 더한다. 다른 팀원은 공통 필드만 읽는다.
 - `스킬` 절: 첫 문장은 `당신의 역할은 **"<유형의 물음>"**다.` 하나. 이어서 `task.skills`(워크플로 스킬의 절대 경로 배열)를 전부 읽는다는 것과, **워크플로 스킬의 각 절(`범위와 배치`, `규칙`, `판단이 갈리는 지점`, `확인 방법`)을 이 에이전트가 어떻게 쓰는지를 적은 표**를 둔다. 같은 유형의 기본 에이전트 표를 출발점으로 삼는다. 이 표는 정의 파일에 직접 적는 것이며 스킬로 빼지 않는다. 워크플로 스킬을 쓰지 않는 에이전트면 그렇게 적는다.
-- 수행 절차에서 프로젝트의 `CLAUDE.md`를 읽는다. 언어·도구에 관한 내용, payload 스키마의 반복, `protocols/`와 다른 규칙은 넣지 않는다. 사용자에게 묻지 않고, 다른 에이전트를 호출하지 않으며, `history.jsonl`·`context.json`·`job.json`을 쓰지 않는다.
-- 검증형이면 `판정 규칙 (요약)` 절을 두고 `payload.md`의 "검증형 판정 규칙"을 가리킨다. 기본 검증형이 아니므로 완료 기준 판정과 프로젝트 테스트 재실행은 하지 않고(`requirements_check`는 빈 배열, `tests.executed: false`), 자기 대상만 검사한다.
+- 수행 절차에서 프로젝트의 `CLAUDE.md`를 읽는다. 언어·도구에 관한 내용과 `task-result.md`와 다른 규칙은 넣지 않는다. 사용자에게 묻지 않고, 팀 대화 표에 없는 상대에게 메시지를 보내지 않으며, `job.json`·`history.jsonl`·`task.json`을 쓰지 않는다.
+- 검증형이면 `agents/reviewer.md`의 `판정 규칙` 절을 그대로 옮겨 둔다. 기본 검증형이 아니므로 완료 기준 판정과 프로젝트 테스트 재실행은 하지 않고(`requirements_check`는 빈 배열, `tests.executed: false`), 자기 대상만 검사한다.
 
-CCForge 저장소에서 만들었고 기본 제공으로 넣으려면 `protocols/payload.md`에 `### <name>` 예시를 더하고 `tests/check_docs.py`를 돌린다. 프로젝트의 `.claude/`에서는 이 두 가지가 없다.
 
 ## 4. 편입
 
 1. 대상 파일을 읽고 진단 표를 만든다: `원본 절 | 내용 요약 | 처리(보존·교체·제거·이동) | 이유`. 도출한 유형과 맡는 대상을 표 위에 적고 §2로 판정한다.
    - **보존**: 그 에이전트 고유의 판단 기준, 도메인 지식, 문체.
    - **교체**: 입출력 방식(채팅으로 받고 답하는 부분)은 Task 파일을 읽고 Result 파일을 쓰는 프로토콜로 바꾼다. 상태 값은 유형의 값으로 바꾼다.
-   - **제거**: 사용자에게 직접 묻기, 다른 에이전트 호출, 워크플로 상태 파일 쓰기, 특정 언어·도구의 명령(→ `CLAUDE.md`로 옮기자고 제안), 코딩 관례(→ `.claude/rules/`로 옮기자고 제안).
+   - **제거**: 사용자에게 직접 묻기, 팀 대화 표에 없는 메시지·호출, 워크플로 상태 파일 쓰기, 특정 언어·도구의 명령(→ `CLAUDE.md`로 옮기자고 제안), 코딩 관례(→ `.claude/rules/`로 옮기자고 제안).
    - **이동**: 산출물 종류나 관점에 묶인 규칙은 정의 파일에 두지 않고 워크플로 스킬 후보로 뺀다(`skill-builder`).
 2. 원본에서 알 수 없는 항목(맡는 대상, payload)을 §2의 설문으로 묻는다.
 3. 진단 표와 §3의 결정 표를 함께 사용자 확인받는다. 버려지는 문장을 명시한다.
@@ -73,17 +72,17 @@ CCForge 저장소에서 만들었고 기본 제공으로 넣으려면 `protocols
 
 ## 5. 확장
 
-- 대상 정의 파일을 고친다. 절 순서와 `프로토콜 (요약)` 불릿 순서를 유지한다.
+- 대상 정의 파일을 고친다. 절 순서와 `Result` 절 불릿 순서를 유지한다.
 - 워크플로 스킬을 쓰는 방식을 바꾸는 것이면 `스킬` 절의 표만 고친다. 워크플로 스킬 파일은 건드리지 않는다. 실행형이 지키는 방식과 검증형이 확인하는 방식이 어긋나지 않는지(예: 실행형은 `low` 규칙을 무시하는데 검증형은 `FAIL`시키는 경우) 함께 본다.
-- `type`은 바꾸지 않는다. 유형을 바꾸는 것은 삭제와 생성이다. `request_type`·`status`·`blocked.type`은 유형의 값이므로 고치지 않는다.
+- `type`은 바꾸지 않는다. 유형을 바꾸는 것은 삭제와 생성이다. `status`·`blocked.type`은 유형의 값이므로 고치지 않는다.
 - 맡는 대상(`description` 첫 문장)을 바꾸면 같은 유형의 다른 에이전트와 대상이 겹치지 않는지 본다. 기본 에이전트의 대상은 한정하지 않는다.
 
 ## 6. 삭제
 
 1. 그 유형의 기본 에이전트(대상을 한정하지 않은 것)면 다른 기본 에이전트가 없는 한 거절한다.
-2. `.claude/workspace/*/*/job.json`에서 `status`가 `IN_PROGRESS`인 job의 `tasks/*.json` 중 `target`이 그 이름인 것이 있으면 미루거나 사용자 확인을 받는다.
-3. `agents/<name>.md`를 지운다. CCForge 저장소면 `protocols/payload.md`의 `### <name>` 절도 지운다. 그 이름이 `agents/`, `protocols/`, `commands/`에 남지 않았는지 `grep`으로 확인한다.
+2. `.ccforge/workspace/*/*/job.json`에서 `status`가 `IN_PROGRESS`인 job의 `steps/*/task.json` 중 `target`이나 `team.reviewers[].agent`가 그 이름인 것이 있으면 미루거나 사용자 확인을 받는다.
+3. `agents/<name>.md`를 지운다. 그 이름이 `agents/`, `protocols/`, `commands/`에 남지 않았는지 `grep`으로 확인한다.
 
 ## 7. 확인하고 보고한다
 
-CCForge 저장소에서 실행 중이면 `python3 tests/check_docs.py`를 돌려 실패가 0이 될 때까지 고친다. 프로젝트의 `.claude/`에서 실행 중이면(검사기가 없다) 다음을 직접 확인한다: frontmatter의 `name` = 파일명, `type`이 세 값 중 하나, `description` 첫 문장에 맡는 대상, 정의 파일의 `request_type`·`status`·`blocked.type` 값 = `task-result.md` 3.3의 그 유형 행, `payload` 주요 항목 ⊇ `payload.md` 3.5의 그 유형 공통 필드, Result 봉투 여덟 필드 줄, 역할 문장 하나, 유형마다 기본 에이전트가 정확히 하나. 보고에는 모드와 대상 이름, 유형, 맡는 대상, 고친 파일·절 표(`파일 | 절 | 변경`), 확인 결과, 추정한 항목, 사용자가 이어서 할 일을 적는다. 정의 파일 전문은 붙이지 않는다.
+다음을 직접 확인한다: frontmatter의 `name` = 파일명, `type`이 세 값 중 하나, `description` 첫 문장에 맡는 대상, 정의 파일의 `status`·`blocked.type` 값 = `task-result.md` 4절의 그 유형 행, `payload` 주요 항목 ⊇ `task-result.md` 5절의 그 유형 공통 필드, 팀 대화 표, Result 봉투 아홉 필드 줄, 역할 문장 하나, 유형마다 기본 에이전트가 정확히 하나. 보고에는 모드와 대상 이름, 유형, 맡는 대상, 고친 파일·절 표(`파일 | 절 | 변경`), 확인 결과, 추정한 항목, 사용자가 이어서 할 일을 적는다. 정의 파일 전문은 붙이지 않는다.
