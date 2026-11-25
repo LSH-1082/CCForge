@@ -50,10 +50,11 @@ Lead ──implement──▶ 실행 팀원 ⇄ 검토 팀원 ──done──�
 - 모든 JSON은 `.tmp`에 쓰고 `mv`한다. 이미 있는 Result는 다시 만들지 않는다(같은 메시지를 다시 받아도 결과가 같다).
 - `job.json`, `history.jsonl`, `task.json`은 Lead만 쓴다.
 
-**step Task** (`task.json`): `step`, `phase`, `target`, `task`(`goal`, `instructions`, `constraints`, `acceptance_criteria`, `files`, `workdir`, `branch`, `base`, `commit_convention`, `skills`), `team`(`analysis`, `reviewers[]`: `member`, `agent`), `max_retries`, `context`(`original_request`, `survey`, `approach`, `prior_jobs`).
+**step Task** (`task.json`): `step`, `phase`, `target`, `task`(`goal`, `instructions`, `constraints`, `acceptance_criteria`, `rules`, `files`, `workdir`, `branch`, `base`, `commit_convention`, `skills`), `team`(`analysis`, `reviewers[]`: `member`, `agent`), `max_retries`, `context`(`original_request`, `survey`, `approach`, `prior_jobs`).
 
 - `workdir`, `branch`, `base`: 팀원이 작업하는 트리와 그 step 브랜치, 시작 커밋. 팀 방식이면 그 실행 팀원의 worktree(epic 동안 재사용), 순차 방식이면 Lead의 통합 worktree다. 메인 작업 트리는 쓰지 않는다. step의 변경은 `base..branch`의 커밋이다.
 - **커밋**: 실행 팀원이 step 브랜치에 논리 단위로 커밋한다(`commit_convention`, 없으면 Conventional Commits). 재작업은 `--fixup`, `done` 전에 autosquash. Lead는 커밋을 새로 만들지 않고 fast-forward로 병합한다.
+- `rules`: 이 step에 적용할 팀 규칙 파일의 절대 경로. `rules/common/*.md`는 항상, `rules/<주제>/*.md`는 그 디렉터리 `README.md`의 `## 적용 대상`에 바뀌는 파일이 해당할 때. 실행형은 지키고(못 지키면 `deviations`), 기본 검증형은 규칙마다 `rules_check`로 판정한다. 규칙 줄 앞의 `[유형·중요도]`가 위반 finding의 값이다(없으면 `implementation·medium`).
 - `reviewers`: 기본 검증형 하나(완료 기준·보고 대조·테스트 재실행·주제 스킬과 관점 스킬 모두)와, 대상이 맞을 때만 다른 검증형.
 
 **Result 봉투**: `step`, `round`, `agent`(정의의 `name`), `member`(팀원 이름), `status`, `completed_at`, `summary`, `payload`, `blocked`. `blocked`는 `BLOCKED`일 때만 `{ "type", "reason", "needs" }`.
@@ -103,6 +104,6 @@ Lead ──implement──▶ 실행 팀원 ⇄ 검토 팀원 ──done──�
 |---|---|
 | 분석형 | `size`(`small` / `normal`), `plan[]`(`step`, `phase`, `title`, `description`, `files`, `skills`, `depends_on`), `plan_scope`, `parallel`(`safe`, `reason`), `acceptance_criteria[]`. `epic_plan`이면 그 대신 `jobs[]`(`order`, `slug`, `goal`, `acceptance_criteria`, `depends_on`). `consult`면 `answer`, `instructions`, `acceptance_criteria`, `reason`. `requirement`면 `user_question`, `alternatives[]`(`approach`, `pros`, `cons`), `reason` |
 | 실행형 | `changed_files[]`(`path`, `change`, `summary`), `commits[]`, `implementation_summary`, `tests`(`executed`, `command`, `passed`, `failed`), `resolved_findings[]`, `deviations[]`, `notes[]` |
-| 검증형 | `requirements_check[]`(`criterion`, `met`, `note`), `tests`(`executed`, …, `matches_coder_report`), `findings[]`(`type`, `severity`, `description`, `location`, `suggestion`), `notes[]` |
+| 검증형 | `requirements_check[]`(`criterion`, `met`, `note`), `rules_check[]`(`file`, `rule`, `met`, `note`), `tests`(`executed`, …, `matches_coder_report`), `findings[]`(`type`, `severity`, `description`, `location`, `suggestion`), `notes[]` |
 
 **검증형 판정 규칙.** 모든 검증형이 같은 규칙을 쓴다(기본 제공 `agents/reviewer.md`의 `판정 규칙` 절을 그대로 옮긴다): 검증을 할 수 없으면 `BLOCKED`, `met: false`나 `medium`·`high` finding이 하나라도 있으면 `FAIL`, 그 밖에는 `PASS`(`low`는 공존). `findings[].type`은 `implementation` / `architecture` / `requirement`, `severity`는 `high` / `medium` / `low`이며 새 값을 만들지 않는다. 대상을 한정한 다른 검증형은 `requirements_check`가 빈 배열, `tests.executed`가 `false`다(완료 기준과 테스트는 기본 검토의 몫).

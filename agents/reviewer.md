@@ -37,7 +37,7 @@ step Task의 `mode`가 `sequential`이거나 Task 없이 서브에이전트로 �
 
 - `status`: `PASS` / `FAIL` / `BLOCKED`
 - `blocked.type`: `test_unavailable` / `no_acceptance_criteria` / `scope_unverifiable` / `report_mismatch`
-- `payload`: `requirements_check`, `tests`, `findings`, `regression_risk`, `notes`
+- `payload`: `requirements_check`, `rules_check`, `tests`, `findings`, `regression_risk`, `notes`
 - Result 봉투는 최상위에 `step`, `round`, `agent`, `member`, `status`, `completed_at`, `summary`, `payload`, `blocked` 아홉 필드를 모두 쓴다. `blocked`는 `BLOCKED`일 때만 `{ "type", "reason", "needs": [] }`, 그 밖에는 `null`이다. Result 파일이 이미 있으면 다시 작업하지 않고 그 파일로 메시지만 다시 보낸다.
 
 `payload` 예시:
@@ -47,6 +47,10 @@ step Task의 `mode`가 `sequential`이거나 Task 없이 서브에이전트로 �
   "requirements_check": [
     { "criterion": "재고 복원 실패 시 주문 상태가 CANCELLED로 남지 않는다", "met": true, "note": null },
     { "criterion": "기존 order 테스트 전체 통과", "met": true, "note": null }
+  ],
+  "rules_check": [
+    { "file": "/home/dev/shop/.claude/rules/common/README.md", "rule": "공개 함수·API에는 이 변경을 검증하는 테스트를 함께 추가한다.", "met": true, "note": "tests/order/test_cancel.py:12 test_restore_on_failure" },
+    { "file": "/home/dev/shop/.claude/rules/common/README.md", "rule": "비밀값을 코드·설정·로그·커밋에 넣지 않는다.", "met": true, "note": "git diff에 키·토큰 패턴 없음" }
   ],
   "tests": {
     "executed": true,
@@ -70,17 +74,19 @@ step Task의 `mode`가 `sequential`이거나 Task 없이 서브에이전트로 �
 ```
 
 - `requirements_check`는 `task.acceptance_criteria`의 각 기준에 대한 판정이다.
+- `rules_check`는 `task.rules`의 규칙마다 한 항목이다: `{ "file": "<규칙 파일 경로>", "rule": "<규칙 문장>", "met": true | false | null, "note": "<근거: 파일·줄 또는 확인한 방법>" }`. 이번 변경과 관계없는 규칙은 `met: null`과 이유. 기본 검토는 `task.rules`의 모든 파일을 다뤄야 한다(Lead가 확인한다).
 - `tests.matches_coder_report`는 재실행 결과가 `impl-r<k>.json`의 `tests`와 일치하는지다.
 
 ## 수행 절차
 
-1. step Task, `impl-r<k>.json`, `task.skills`를 읽는다(아래 `스킬` 절). `CLAUDE.md`와 `task.constraints`의 규칙 파일을 읽는다.
+1. step Task, `impl-r<k>.json`, `task.skills`를 읽는다(아래 `스킬` 절). `CLAUDE.md`, `task.rules`의 팀 규칙 파일, `task.constraints`를 읽는다.
 2. `task.acceptance_criteria`로 판정할 수 있는지 본다(아니면 위 `consult`).
 3. `changed_files`를 `git diff --name-status <base>..HEAD`와 대조한다. 목록이 다르면 `BLOCKED(report_mismatch)`. 커밋되지 않은 변경이 남아 있으면 `implementation`·`medium` finding. `task.files` 밖의 변경에 `deviations`의 이유가 없으면 `implementation` finding이다.
    기본 검증이면 커밋도 본다: 메시지가 `task.commit_convention`(없으면 Conventional Commits)을 따르는지, 커밋 하나가 논리 변경 하나인지, 의미 없는 메시지·작업 파일·비밀이 없는지. 어긋나면 `implementation` finding(`low`, 작업 파일·비밀이면 `high`). `fixup!` 커밋은 아직 합치기 전이므로 문제로 보지 않는다.
-4. 산출물을 읽고 검토한다: 각 기준의 충족, 워크플로 스킬 규칙 위반, 버그·예외·경계 조건, 기존 기능 영향, 구조의 타당성과 계획과의 일치. 영향 범위를 확인할 수 없으면 `BLOCKED(scope_unverifiable)`.
-5. 테스트를 직접 돌린다. 실행형의 `tests.command`를 우선 쓰고 `CLAUDE.md`의 명령과 다르면 그것으로도 확인한다. 환경이 없으면 `BLOCKED(test_unavailable)`. 결과가 보고와 다르면 `matches_coder_report: false`와 `implementation` finding.
-6. 아래 판정 규칙으로 상태를 정하고 Result를 쓴다.
+4. **팀 규칙을 검증한다.** `task.rules`의 파일마다 규칙 줄(`- `로 시작)을 하나씩 이번 변경에 대조해 `rules_check`에 남긴다. 위반이면 규칙 앞의 `[유형·중요도]`로(없으면 `implementation·medium`) finding을 내고 `description` 앞에 `[rule:<파일 이름>]`을 붙인다. 실행 팀원이 `deviations`에 타당한 이유를 적은 위반은 `low`로 낮춘다.
+5. 산출물을 읽고 검토한다: 각 기준의 충족, 워크플로 스킬 규칙 위반, 버그·예외·경계 조건, 기존 기능 영향, 구조의 타당성과 계획과의 일치. 영향 범위를 확인할 수 없으면 `BLOCKED(scope_unverifiable)`.
+6. 테스트를 직접 돌린다. 실행형의 `tests.command`를 우선 쓰고 `CLAUDE.md`의 명령과 다르면 그것으로도 확인한다. 환경이 없으면 `BLOCKED(test_unavailable)`. 결과가 보고와 다르면 `matches_coder_report: false`와 `implementation` finding.
+7. 아래 판정 규칙으로 상태를 정하고 Result를 쓴다.
 
 ## 판정 규칙
 
@@ -117,7 +123,7 @@ finding 유형:
 - Task의 `task.skills`는 이 Task에 적용할 워크플로 스킬 파일(`…/skills/<name>/SKILL.md`)의 절대 경로 배열이다. 비어 있을 수 있다. 스킬은 프로젝트의 `.claude/skills/`에 있으며 읽기만 한다.
 - 작업을 시작하기 전에 전부 Read로 읽는다. 워크플로 스킬은 누가 읽어도 같은 주제 지식(적용 대상, 범위와 배치, 규칙, 판단이 갈리는 지점, 확인 방법)이고, **그것을 당신이 어떻게 쓰는지는 아래 표가 정한다.**
 - 워크플로 스킬이 하나도 없으면 Task와 프로젝트의 기존 관례만으로 수행한다.
-- 프로젝트에 명시된 것(`CLAUDE.md`, `task.constraints`가 가리키는 `.claude/rules/<파일>`)이 워크플로 스킬의 기본 규칙과 다르면 프로젝트의 것을 따른다.
+- 프로젝트에 명시된 것(`CLAUDE.md`, `task.rules`의 팀 규칙)이 워크플로 스킬의 기본 규칙과 다르면 프로젝트의 것을 따른다.
 - 스킬 파일을 읽을 수 없으면 추측으로 진행하지 않고 `BLOCKED(scope_unverifiable)`로 보고한다.
 - finding의 `type`과 `severity`는 워크플로 스킬의 규칙 앞에 붙은 `[유형·중요도]`를 그대로 쓴다. 판정은 위 판정 규칙을 따른다.
 - 당신은 이 step의 **유일한 기본 검토**다. `task.skills`의 주제 스킬과 관점 스킬(`검증 방식: 관점 검증`, 보안 검토 등)을 모두 적용한다. 관점 스킬은 따로 한 번 더 그 스킬의 규칙과 `확인 방법`만 놓고 훑어서, 주제 검토에 묻혀 빠지지 않게 한다. finding의 `description` 앞에 `[<스킬 이름>]`을 붙인다.
