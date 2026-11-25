@@ -5,7 +5,7 @@
 **Claude Code agent teams로 굴러가는 코딩 팀.**<br>
 팀장이 요구를 분석시켜 구현 계획을 보고하고, 승인하면 팀원들이 서로 대화하며 만들고·검토하고·커밋한 뒤 브랜치를 푸시합니다.
 
-[빠른 시작](#빠른-시작) · [동작 방식](#동작-방식) · [설정](#설정) · [프로젝트에 맞추기](#프로젝트에-맞추기) · [FAQ](#faq) · [설계 철학](docs/philosophy.md)
+[빠른 시작](#빠른-시작) · [동작 방식](#동작-방식) · [설정](#설정) · [프로젝트에 맞추기](#프로젝트에-맞추기) · [FAQ](#faq)
 
 </div>
 
@@ -237,7 +237,7 @@ claude -p "/lead <요구사항>" --permission-mode acceptEdits \
 
 | 읽는 사람 | 문서 |
 |---|---|
-| 처음 보는 사람 | 이 README, [설계 철학](docs/philosophy.md) |
+| 처음 보는 사람 | 이 README |
 | 팀장(실행 중) | [`commands/lead.md`](commands/lead.md) |
 | 각 팀원(실행 중) | [`agents/`](agents/) — 자기 정의 파일 하나로 완결 |
 | 에이전트를 만드는 사람 | [`protocols/task-result.md`](protocols/task-result.md) |
