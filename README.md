@@ -1,158 +1,259 @@
+<div align="center">
+
 # CCForge
 
-**CCForge**(Claude Code Forge)는 코딩 작업용 Claude Code 멀티 에이전트 워크플로 프레임워크다. 사용자 요청 1건(epic)을 PR 단위 job으로 나누고, 세 유형의 서브에이전트가 이어받아 처리한다. 분석형이 요구를 해석해 계획을 세우고, 실행형이 코드·테스트·문서를 만들고, 검증형이 검증한다. 에이전트는 이 세 유형뿐이고 모두 같은 프로토콜을 쓴다. Orchestrator는 에이전트를 이름으로 알지 않고 `agents/`의 정의 파일을 읽어 그때그때 고른다. 산출물 종류와 검증 관점은 워크플로 스킬로 확장한다. 상태는 전부 `.claude/workspace/`의 파일로 남아 세션이 끊겨도 `resume`으로 이어간다.
+**Claude Code agent teams로 굴러가는 코딩 팀.**<br>
+팀장이 요구를 분석시켜 구현 계획을 보고하고, 승인하면 팀원들이 서로 대화하며 만들고·검토하고·커밋한 뒤 브랜치를 푸시합니다.
 
-## 설계 철학
+[빠른 시작](#빠른-시작) · [동작 방식](#동작-방식) · [설정](#설정) · [프로젝트에 맞추기](#프로젝트에-맞추기) · [FAQ](#faq)
 
-CCForge의 규칙은 아래 생각에서 나왔다. 규칙을 고치거나 더할 때는 먼저 이 생각에 맞는지 본다.
+</div>
 
-### 1. 맡겼으면 묻지 않는다
+<br>
 
-사람이 자리를 비워도 일이 끝까지 가야 한다. 그래서 되물어 줄 사람이 없다고 가정하고 설계한다.
+![요청 하나가 흘러가는 길: 사용자 → 팀장 → 분석원 → 구현 계획 보고·승인 → 실행 팀원 ⇄ 검토 팀원 루프 → done → 최종 보고](docs/team-flow.png)
 
-- job 사이에서 멈출지, 검증 관점을 뺄지 같은 **진행 방식은 묻지 않는다.** 조건이 맞으면 바로 하고, 진행 상황 한 줄로만 알린다.
-- 설문은 **무엇을 만들지가 갈릴 때만** 한다. 규모가 크다는 것은 물을 이유가 아니다.
-- 묻지 않는 대신 **설문이 필요할 만큼 명확하지 않은 작업과 큰 작업은 분석형이 먼저 계획을 세운다.** 실행형으로 바로 가는 것은 무엇을 어디에 어떻게 고칠지가 분명한 작은 작업뿐이다.
-- 설정이 깨졌거나 규칙 파일을 읽을 수 없어도 **멈추지 않는다.** 기본 동작으로 진행하고 알린다.
-- 그 대신 확실하지 않으면 안전한 쪽으로 간다. 관점 검증을 뺄지 애매하면 호출하고, 어느 에이전트에 보낼지 애매하면 기본 에이전트에 보낸다. 묻지 않는다는 것은 추측한다는 뜻이 아니다.
+```text
+> /lead 결제 실패 시 재시도 로직을 추가해 줘
 
-### 2. 중간에 끊겨도 잃는 것이 없어야 한다
+## 구현 계획 — 결제 실패 시 재시도
+구현 방식: PaymentClient 호출을 지수 백오프 재시도로 감싼다 (최대 3회)
+단계: 1. RetryPolicy 추가 — src/payment/retry.py
+      2. PaymentClient에 적용 + 테스트 — src/payment/client.py, tests/...
+문제점·위험: 결제 API가 멱등하지 않으면 중복 청구 가능 → idempotency key 필요
+? 승인 / 수정 요청 / 중단
+```
 
-사용자가 끊을 수도 있고 세션 한도에 걸릴 수도 있다. 어느 지점에서 끊겨도 `resume`으로 이어갈 수 있어야 한다.
+## 무엇을 해 주나
 
-- 상태는 기억이 아니라 **파일**에 있다. `history.jsonl`이 원본이고 나머지는 거기서 다시 만들 수 있다.
-- 복구할 때는 **기록보다 저장소의 실제 상태를 믿는다.** 커밋은 됐는데 기록 전에 끊긴 경우를 git에서 직접 확인한다.
-- 다시 보내도 결과가 같아야 한다(멱등성). 재전송은 재시도 횟수를 늘리지 않는다.
+- **계획부터 보고하고 승인을 받습니다.** 분석원이 요구를 해석해 구현 방식·영향 범위·단계·문제점을 정리하면, 팀장이 한 화면으로 요약해 보고합니다. 승인해야 코드에 손을 댑니다.
+- **팀원끼리 직접 대화합니다.** 실행 팀원과 검토 팀원이 전원 PASS가 날 때까지 재작업 루프를 돌고, 헷갈리는 것은 분석원에게 직접 묻습니다. 팀장에게는 완료와 예외만 올라옵니다.
+- **요구가 잘못됐으면 사용자에게 돌아옵니다.** 구현이 불가능하거나 요구가 모호하면, 분석원이 대안을 정리하고 팀장이 "구체화할지, 다른 방식으로 갈지"를 묻습니다. 팀이 요구를 임의로 바꾸지 않습니다.
+- **실무처럼 커밋합니다.** 논리 단위, Conventional Commits(또는 팀 규약), 재작업은 fixup 후 autosquash. 병합은 fast-forward라 커밋이 그대로 남습니다.
+- **메인 작업 트리를 건드리지 않습니다.** 모든 작업은 `.claude/worktrees/`의 git worktree에서 하고, 끝나면 브랜치를 원격에 푸시합니다. PR 생성과 병합은 사용자 몫입니다.
+- **끊겨도 이어집니다.** 상태는 전부 파일과 git에 남아 `/lead resume`으로 이어갑니다.
 
-### 3. 에이전트는 세 유형이고, 달라지는 것은 스킬로 뺀다
+## 빠른 시작
 
-에이전트는 **분석형, 실행형, 검증형** 세 유형뿐이다. 나중에 만드는 에이전트도 이 셋 중 하나다.
+**요구 사항:** [Claude Code](https://code.claude.com), git, python3(hook용).
 
-- **유형이 프로토콜을 정한다.** Task/Result 봉투는 하나이고, `request_type`·`status`·`blocked.type`은 유형마다 고정이다. 분석형은 `READY`/`BLOCKED`, 실행형은 `DONE`/`BLOCKED`, 검증형은 `PASS`/`FAIL`/`BLOCKED`를 낸다. 에이전트마다 달라도 되는 것은 `payload`뿐이며, 그것도 유형 공통 필드는 담아야 한다.
-- **Orchestrator는 에이전트를 이름으로 알지 않는다.** epic을 시작할 때 `agents/*.md`의 머리(`name`, `type`, `description`)를 읽어 목록을 만들고, Task마다 유형과 `description`의 대상으로 에이전트를 고른다. 절차 문서에는 유형만 적혀 있어 에이전트를 더해도 절차가 바뀌지 않는다. 에이전트 등록은 정의 파일 하나를 두는 것으로 끝난다.
-- **유형마다 기본 에이전트가 하나 있다.** 대상을 한정하지 않은 에이전트이고 기본 제공은 `analysis`, `coder`, `reviewer`다. 대상을 좁게 적은 에이전트(예: "의존성 파일의 취약점을 외부 도구로 검사한다")는 그 대상의 Task에서 기본 에이전트 대신 뽑히고, 검증형은 기본 검증과 함께 호출된다.
-- **규칙 목록만 다른 일은 에이전트가 아니라 스킬이다.** 산출물 종류(코드, 문서, 명세)와 검증 관점처럼 **일의 성격에 따라 달라지는 규칙은 워크플로 스킬**이다. 다른 도구·모델·절차가 필요할 때만 에이전트를 만든다. 언어와 도구에 관한 것은 스킬이 아니라 프로젝트의 `CLAUDE.md`에 둔다(8번).
-- **주제 지식은 워크플로 스킬 한 곳에 두고, 관점은 에이전트 정의에 직접 적는다.** 코드 구조나 문서 작성 같은 주제의 규칙은 누가 읽어도 같은 내용이므로 `skills/<이름>/`에 한 번만 적고 모든 에이전트가 같은 파일을 읽는다. 에이전트마다 다른 것은 그 지식으로 무엇을 하느냐다. 분석형은 계획에 반영하고, 실행형은 지켜서 만들고, 검증형은 위반을 찾는다. 이 방식은 주제와 무관하게 일정하므로 스킬로 빼지 않고 에이전트 정의 파일(`agents/<이름>.md`)에 직접 적는다.
-- **같은 규칙을 여러 파일에 적지 않는다.** 규칙이 한 곳에만 있으면 만든 쪽이 따른 규칙과 검증하는 쪽이 확인하는 규칙이 같은 문장이다. 에이전트를 새로 만들거나 이미 있는 에이전트를 가져올 때는 `agent-builder`가 CCForge의 규약(유형, 봉투, 워크플로 스킬을 쓰는 방식)에 맞춰 편입한다.
-- **검증은 여러 호출로 이루어진다.** 기본 검증 하나는 항상 있고, 관점 스킬마다 관점 검증이, 대상이 맞는 검증형 에이전트마다 호출이 붙는다. 전원이 `PASS`여야 다음으로 넘어간다. 이번 변경과 관계없는 관점과 에이전트는 아예 호출하지 않는다.
-
-### 4. 하나의 일에는 하나의 이름
-
-job 하나가 브랜치 하나이고 PR 하나이며 디렉터리 하나다.
-
-- 브랜치 이름이 먼저 정해지고 job 디렉터리 이름은 그것을 따른다(`/`만 `_`로). 브랜치와 작업 기록을 이름으로 바로 짝지을 수 있어야 한다.
-- job은 `order` 순으로 하나씩 진행한다. 브랜치도 작업 트리도 job당 하나다.
-- **job 안의 독립인 step은 같은 트리에서 동시에 진행한다.** 테스트 대량 작성처럼 파일이 서로 겹치지 않는 step이 많을 때다. worktree를 만들지 않으며 격리는 파일 범위(`task.files`)로 한다. 커밋은 step마다 그 파일만 한다. 그래도 되는 저장소인지(테스트를 파일 단위로 돌릴 수 있는지, 빌드 출력이 겹치지 않는지)는 분석형이 저장소를 읽고 판단하고, 아니면 하나씩 진행한다.
-
-### 5. 팀의 규칙은 팀의 파일에 둔다
-
-CCForge가 팀의 방식을 정하지 않는다.
-
-- 브랜치 규약, git 규약 같은 팀 규칙은 `rules/`에 파일로 둔다. **있으면 따르고 없으면 기본 동작**이다. 브랜치 규약만은 예외로, 없으면 첫 브랜치를 만들기 전에 설문으로 한 번 묻고 답을 `rules/branch-convention.md`로 저장한다. 브랜치 이름은 PR과 기록에 그대로 남아 나중에 바꾸기 어렵기 때문이다. 일을 맡기기 전인 시작 시점에만 묻고, 진행 중에는 묻지 않는다.
-- git 무시 규칙도 프로젝트의 것이다. `.claude/workspace/`는 프로젝트의 `.gitignore`에 넣고, CCForge는 무시 파일을 만들거나 고치지 않는다.
-- 설정 파일에는 **정말 값으로 조절할 것만** 둔다(동시 진행 step 수, 재시도 횟수, job 사이 멈춤). 규약으로 정할 수 있는 것은 설정 키로 만들지 않는다. 설정이 늘수록 CCForge를 이해하기 어려워진다.
-- 설정에 있는 값은 문서가 숫자를 직접 적지 않고 **설정 키를 가리킨다.** 기본값은 한 곳에만 적는다.
-
-### 6. 문서가 곧 동작이다
-
-CCForge는 코드가 아니라 문서로 되어 있고, 에이전트는 문서에 적힌 대로 움직인다. 문서끼리 어긋나면 그것이 곧 버그다.
-
-- 같은 규칙을 여러 곳에 적을 때는 **정본을 정하고** 나머지는 그것을 가리킨다.
-- 문서를 고칠 때마다 `tests/check_docs.py`로 정합성을 확인하고, 문서가 지시하는 git 명령은 `tests/check_git.sh`로 실제로 돌려 본다. 비용이 들지 않는 검사를 먼저 하고, 실제 실행 테스트는 그다음이다.
-- 용어를 바꿀 때는 **기계적으로 치환하지 않고 문맥을 읽고 고친다.** 단어만 바꾸면 뜻이 틀린 문장이 남는다.
-- 고친 뒤에는 전체 일관성을 다시 본다. 구조를 바꿀 때 생기는 어긋남은 자동 검사보다 읽어서 찾는 경우가 많다.
-
-### 7. 컨텍스트는 비용이다
-
-Orchestrator는 epic이 끝날 때까지 한 세션에서 돌고, 읽은 것은 전부 이후 모든 턴의 비용이 된다.
-
-- Orchestrator는 **소스 코드를 읽지 않는다.** 이해하는 일은 분석형과 실행형에 맡긴다.
-- 문서는 통째로 읽지 않고 필요한 절만, 스킬과 에이전트 정의는 머리만 읽는다. 서브에이전트의 응답은 세 줄이고 결과는 파일로 받는다.
-- 길이가 계속 느는 값에는 상한을 둔다. 긴 작업은 job 사이에서 끊고 새 세션으로 이어가는 편이 싸다.
-
-### 8. 여러 환경에서 쓸 수 있어야 한다
-
-CCForge는 한 저장소의 설정이 아니라 프레임워크다.
-
-- **CCForge는 쓰는 프로젝트의 `.claude/` 안에 둔다.** 전역으로 설치하지 않는다. 그래서 워크플로는 그 프로젝트에서만 켜지고, 프로젝트마다 에이전트와 스킬을 자기 사정에 맞게 고칠 수 있으며, 저장소에 커밋하면 팀원도 같은 것을 쓴다. 그 안에서도 CCForge의 파일(`agents/`, `commands/`, `protocols/`, `skills/`)과 프로젝트의 파일(설정, 팀 규칙, 작업 기록)은 자리가 나뉘어 있어, CCForge를 다시 복사해도 프로젝트의 것은 바뀌지 않는다.
-- **언어와 도구에 관한 내용은 프로젝트의 `CLAUDE.md`에 넣는다.** 쓰는 언어와 프레임워크, 테스트·빌드·린트 명령, 패키지 관리자가 여기에 해당한다. CCForge의 문서와 스킬에는 넣지 않는다. **코딩 관례(네이밍, 스타일, 팀이 쓰는 패턴)는 `CLAUDE.md`가 아니라 `rules/`에 적는다.** 언어에 묶인 내용이어도 팀이 정한 약속이기 때문이다. 그래야 같은 CCForge를 어떤 스택의 저장소에도 그대로 설치할 수 있고, 스택이 바뀌어도 고칠 곳이 `CLAUDE.md` 하나다.
-- 자리는 셋으로 나뉜다. 무엇을 쓰고 어떻게 돌리는지(언어·도구·명령)는 `CLAUDE.md`, 팀의 약속(브랜치·git 규약, 코딩 관례 등)은 `rules/`, 일의 성격에 따른 규칙(코드 구조, 문서 작성, 검증 관점)은 스킬이다. 스킬은 어느 스택에서나 성립하는 말로만 쓴다.
-- 환경마다 다른 것은 추측하지 않고 프로젝트가 적게 한다. `CLAUDE.md`에 테스트 명령이 없으면 에이전트는 저장소에서 찾아보되, 찾지 못하면 지어내지 않고 `BLOCKED`로 알린다.
-
-## 설치
-
-CCForge의 파일을 쓰려는 프로젝트의 `.claude/`에 복사한다. 전역(`~/.claude/`)에는 아무것도 설치하지 않으므로 그 프로젝트에서만 동작한다.
+**1. 설치** — 쓰려는 프로젝트의 `.claude/`에 복사합니다. 전역에는 아무것도 설치하지 않습니다.
 
 ```bash
-cd <이 저장소>
-mkdir -p <프로젝트>/.claude
-cp -R agents commands protocols skills <프로젝트>/.claude/
-echo '.claude/workspace/' >> <프로젝트>/.gitignore
-# 선택: 본보기를 복사해 프로젝트에 맞게 고친다
-cp orchestrate.config.json <프로젝트>/.claude/
-mkdir -p <프로젝트>/.claude/rules && cp rules/README.md <프로젝트>/.claude/rules/
+git clone <이 저장소> ccforge
+cd <프로젝트>
+mkdir -p .claude && cp -R ../ccforge/{agents,commands,protocols,skills,hooks} .claude/
+cp -Rn ../ccforge/rules .claude/      # 팀 규칙 본보기. 이미 있으면 덮어쓰지 않는다
+printf '.claude/workspace/\n.claude/worktrees/\n' >> .gitignore
 ```
 
-CCForge를 업데이트할 때는 첫 `cp -R` 줄만 다시 실행한다. 설정·팀 규칙·작업 기록은 건드리지 않는다. 프로젝트에서 직접 고친 에이전트나 기본 제공 스킬이 있으면 덮어써지므로 먼저 커밋해 두고 diff로 확인한다.
+**2. agent teams, hook, auto 모드 켜기** — `<프로젝트>/.claude/settings.json`에 합칩니다.
 
-| 어디 (`<프로젝트>/`) | 무엇 | 누가 고치나 |
+```json
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"
+  },
+  "permissions": { "defaultMode": "auto" },
+  "hooks": {
+    "TaskCompleted": [{ "hooks": [{ "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/ccforge_check.py\" task-completed" }] }],
+    "TeammateIdle":  [{ "hooks": [{ "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/ccforge_check.py\" teammate-idle" }] }]
+  }
+}
+```
+
+**3. 프로젝트 정보 적기** — 저장소 루트의 `CLAUDE.md`에 언어와 테스트 명령을 적어 두면 팀원들이 읽습니다.
+
+```markdown
+- 언어: Python 3.12
+- 테스트: `pytest -q`
+```
+
+**4. 실행** — Claude Code를 새로 열고:
+
+```text
+/lead calc.py에 divide(a, b)를 추가해 줘. 0으로 나누면 ValueError를 내고 테스트도 추가해 줘.
+```
+
+무인으로 돌리려면 `.claude/lead.config.json`에 `{"plan": {"require_approval": false}}`를 두고 `claude -p`로 실행합니다([FAQ](#faq) 참고).
+
+## 동작 방식
+
+### 팀 구성
+
+| 역할 | 정의 파일 | 하는 일 |
 |---|---|---|
-| `.claude/agents/` | 에이전트 정의. 기본 제공 셋 + 프로젝트가 추가한 것. Orchestrator가 여기를 읽어 목록을 만든다 | 프로젝트. `agent-builder`로 추가한다 |
-| `.claude/commands/`, `protocols/` | CCForge 본체. Orchestrator 절차, 형식 정본 | 복사해 온 것. 고치지 않는다 |
-| `.claude/skills/<name>/` | 워크플로 스킬(기본 제공 `code-structure`, `doc-writing` + 프로젝트가 추가한 것)과 `skill-builder`, `agent-builder` | 프로젝트. `skill-builder`로 추가한다 |
-| `.claude/orchestrate.config.json` | 설정. 없으면 기본값 | 프로젝트 (선택) |
-| `.claude/rules/` | 팀 규칙. 없으면 기본 동작 | 프로젝트 (선택) |
-| `CLAUDE.md` | 언어와 도구 | 프로젝트 |
-| `.gitignore` | `.claude/workspace/`를 넣는다 | 프로젝트 |
-| `.claude/workspace/` | 실행 중에 생기는 작업 기록 | Orchestrator |
+| **팀장** | `commands/lead.md` (메인 세션) | 사용자 창구. 분석 요청, 계획 보고·승인, step 배정, 병합, 푸시, 최종 보고. 코드를 직접 만지지 않습니다 |
+| **분석원** | `agents/analysis.md` | 요구 해석, 구현 방식·문제점·step 계획. 팀원의 질문에 답하고, 요구 자체가 문제면 대안을 정리해 팀장에게 넘깁니다 |
+| **실행 팀원** | `agents/coder.md` | step 하나를 맡아 구현·테스트·커밋. 검토를 요청하고 판정에 따라 재작업합니다 |
+| **검토 팀원** | `agents/reviewer.md` | 완료 기준, 워크플로 스킬 규칙, 커밋을 직접 확인하고 테스트를 다시 돌려 독립적으로 판정합니다 |
 
-- 이 저장소의 `docs/`와 `tests/`는 사람과 개발을 위한 것이다. 실행 중에는 아무도 읽지 않는다.
-- 이 저장소 루트의 `orchestrate.config.json`과 `rules/README.md`는 프로젝트에 복사해 쓰는 본보기다.
+에이전트는 이 세 유형(분석형·실행형·검증형)뿐이고, 일의 종류(코드, 문서, 보안 검토 등)에 따라 달라지는 규칙은 [워크플로 스킬](#워크플로-스킬)로 넣습니다.
 
-## 사용
+### 팀은 필요할 때만
 
+[공식 문서](https://code.claude.com/docs/en/agent-teams.md)대로, agent teams는 팀원마다 컨텍스트를 따로 쓰므로 토큰이 팀원 수만큼 듭니다. 그래서 CCForge는 **동시에 돌 step이 둘 이상일 때만** 팀을 만듭니다.
+
+| 상황 | 실행 방식 |
+|---|---|
+| 독립된 step이 여럿이고 서로 다른 파일을 맡음 | **팀 방식** — 분석원 1, 검토 1, 실행 2(기본 5명 안), epic 동안 유지 |
+| step이 하나뿐, 작은 일, 순차 의존, `claude -p` | **순차 방식** — 같은 정의를 서브에이전트로 차례로 호출, 팀장이 메시지 전달 |
+
+### 커밋이 원격까지 가는 길
+
+![커밋이 원격까지 가는 길: 실행 팀원 worktree의 step 브랜치 → 검토 → 통합 worktree로 ff 병합 → git push. 메인 작업 트리는 건드리지 않음](docs/git-flow.png)
+
+1. 팀장이 step마다 job 브랜치 끝에서 `<branch>--step-<n>` 브랜치를 만듭니다.
+2. 실행 팀원이 자기 worktree에서 커밋합니다. 재작업은 `--fixup`으로 남기고, 전원 PASS 후 autosquash로 합칩니다.
+3. 팀장이 통합 worktree에서 `git merge --ff-only`로 병합합니다. 앞서 병합된 step과 충돌하면 실행 팀원이 rebase로 풀고 다시 검토받습니다.
+4. 브랜치(job)가 끝나면 `git push -u`. 강제 푸시와 PR 생성은 하지 않습니다.
+
+### 신뢰할 수 있게 만드는 장치
+
+- **팀 규칙도 검증합니다.** 적용한 규칙마다 검토 팀원이 지켰는지 판정해 남기고, 검토가 빠뜨린 규칙 파일이 있으면 병합하지 않습니다.
+- **hook이 완료 조건을 강제합니다.** `TaskCompleted`는 검토 전원 PASS, 커밋되지 않은 변경 없음을 확인해야 완료를 허락합니다. `TeammateIdle`은 할 일이 남았는데 멈춘 팀원을 세 번까지 깨우고, 그래도 안 되면 팀장에게 넘깁니다.
+- **메시지가 아니라 파일로 판단합니다.** 모든 Result는 `.claude/workspace/`에 JSON으로 남고, step마다 `log.jsonl`에 순서대로 기록됩니다. 메시지 형식이 어긋나도 흐름이 깨지지 않습니다.
+- **모든 것이 `.claude/` 안에 있습니다.** 정의·규칙·설정과 실행 중의 작업 기록(`workspace/`)·worktree(`worktrees/`)가 한 디렉터리에 모입니다. Claude Code는 `.claude/`를 보호 경로로 다루므로 **`auto` 권한 모드로 실행해야 합니다**(아래 [권한](#권한)).
+
+## 명령어
+
+| 명령 | 하는 일 |
+|---|---|
+| `/lead <요구사항>` | 새 epic 시작. 브랜치를 나누려면 요청에 그렇게 말합니다("frontend와 backend 브랜치를 따로") |
+| `/lead resume [epic_id]` | 중단된 epic 이어가기 |
+| `/skill-builder <요청>` | 워크플로 스킬 추가·수정·삭제 |
+| `/agent-builder <요청>` | 에이전트 추가·편입·확장·삭제 |
+
+## 설정
+
+`.claude/lead.config.json` (선택, 없으면 기본값)
+
+| 키 | 기본 | 뜻 |
+|---|---|---|
+| `parallel.max_parallel` | `3` | 동시에 도는 step 수. `1`이면 팀을 만들지 않습니다 |
+| `team.max_members` | `5` | 팀원 총원 상한(분석원·검토 포함). 공식 권장은 3~5명입니다 |
+| `retry.max_retries` | `3` | step마다 허용하는 재작업 횟수 |
+| `job.pause_between_jobs` | `false` | 브랜치 하나가 끝날 때마다 멈추고 `resume`을 기다립니다 |
+| `plan.require_approval` | `true` | 구현 계획 승인을 받고 실행합니다. 무인 실행이면 `false` |
+
+## 프로젝트에 맞추기
+
+| 무엇 | 어디에 | 예 |
+|---|---|---|
+| 언어·프레임워크·테스트 명령 | `CLAUDE.md` | `pytest -q`, `npm test` |
+| 모든 작업에 적용할 팀 규칙 | `.claude/rules/common/README.md` | 테스트 필수, 비밀값 금지, 커밋 규약 |
+| 특정 영역에만 적용할 규칙 | `.claude/rules/<주제>/*.md` | `rules/python/`, `rules/frontend/` |
+| 산출물 종류·검증 관점 | `.claude/skills/<name>/SKILL.md` | 보안 검토, 인프라 설정 |
+| 다른 도구·모델이 필요한 에이전트 | `.claude/agents/<name>.md` | 외부 스캐너로 의존성 취약점 검사 |
+
+### 팀 규칙
+
+```text
+.claude/rules/
+├── common/README.md        # 모든 step에 적용
+├── python/                 # README.md의 "## 적용 대상"에 맞는 step에만 적용
+│   ├── README.md           #   ## 적용 대상
+│   └── typing.md           #   - `**/*.py`
+└── _example/               # _로 시작하면 예시. 적용하지 않음
 ```
-/orchestrate <요구사항>          새 epic 시작
-/orchestrate resume [epic_id]    중단된 epic 이어가기
-/skill-builder <만들 스킬>       워크플로 스킬 추가·수정·삭제
-/agent-builder <요청>            에이전트 생성·편입·확장·삭제
+
+- 규칙은 한 줄에 하나(`- `)씩 쓰고, 앞에 `[유형·중요도]`를 붙일 수 있습니다(예: `[implementation·high]`). 없으면 `implementation·medium`입니다.
+- 팀장이 step마다 적용할 규칙 파일을 골라 넘기고, 실행 팀원은 지키고, **검토 팀원은 규칙마다 지켰는지 `rules_check`로 남깁니다.** 위반은 그 중요도의 finding이 되고, `medium` 이상이면 재작업입니다. 팀장은 검토가 모든 규칙 파일을 다뤘는지 확인한 뒤에만 병합합니다.
+- 브랜치 이름·커밋 메시지 규약도 여기 어느 파일에든 적으면 따릅니다.
+
+### 워크플로 스킬
+
+같은 스킬 파일을 세 유형이 함께 읽고, 각자 정해진 방식으로 씁니다. 분석원은 계획에 반영하고, 실행 팀원은 지켜서 만들고, 검토 팀원은 위반을 찾습니다. 규칙이 한 곳에만 있으니 만든 쪽과 검토하는 쪽이 같은 문장을 봅니다. 기본으로 `code-structure`(코드)와 `doc-writing`(문서·명세)이 들어 있고, `/skill-builder`로 더합니다. 규격은 [`protocols/skill-spec.md`](protocols/skill-spec.md)에 있습니다.
+
+### 권한
+
+**`auto` 권한 모드가 필요합니다.** 작업 기록과 worktree가 `.claude/` 안에 있는데, Claude Code는 `.claude/`를 보호 경로로 다뤄 `default`·`acceptEdits` 모드에서는 쓰기마다 확인을 받습니다. 허용 규칙(`Edit(.claude/**)` 등)으로도 풀리지 않습니다. 실측 결과는 다음과 같습니다.
+
+| 모드 | `.claude/workspace` 쓰기 | `.claude/worktrees` |
+|---|---|---|
+| `default`, `acceptEdits` | 확인 필요(무인이면 거부) | 됨 |
+| `auto` | 됨 | 됨 |
+| `bypassPermissions` | 됨 | 됨 |
+
+`settings.json`의 `"defaultMode": "auto"`로 두거나, 세션에서 shift+tab으로 auto를 고릅니다. 그 밖에 자주 쓰는 도구는 `permissions.allow`에 넣어 둡니다. 테스트·빌드 명령은 프로젝트에 맞게 추가합니다.
+
+```json
+["Read", "Write", "Edit", "Glob", "Grep", "Agent", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet",
+ "Bash(git *)", "Bash(python3 *)", "Bash(jq *)", "Bash(mkdir *)", "Bash(mv *)", "Bash(echo *)", "Bash(date *)"]
 ```
 
-서브에이전트는 정의 파일의 `name`으로 호출된다. 파일을 복사한 뒤에는 Claude Code 세션을 새로 열어야 명령과 에이전트가 잡힌다.
+## 디렉터리 구조
 
-## 프로젝트별로 맞출 것
+```text
+<프로젝트>/.claude/
+├── commands/lead.md         # 팀장 절차 (/lead)
+├── agents/                  # analysis · coder · reviewer
+├── skills/                  # 워크플로 스킬 + builder + lead-resume · lead-branching
+├── hooks/ccforge_check.py   # TaskCompleted · TeammateIdle
+├── protocols/               # 에이전트·스킬 작성 규격
+├── rules/                   # 팀 규칙: common/, <주제>/, branch-convention.md
+├── lead.config.json         # (선택) 설정
+├── settings.json            # agent teams, hook, 권한 모드
+├── workspace/<epic>/        # 실행 기록: epic·job 상태, step별 Task·Result·로그 (.gitignore)
+└── worktrees/<epic>/        # 통합 worktree, 팀원별 worktree (.gitignore)
+```
 
-1. **권한** — 워크플로가 쓰는 것은 작업 공간 쓰기(`Edit(.claude/workspace/**)`, `Bash(mkdir -p .claude/workspace/*)`, `Bash(mv .claude/workspace/*)`)와 git 명령(`Bash(git status *)`, `git diff`, `git log`, `git rev-parse`, `git check-ignore`, `git branch`, `git checkout`, `git add`, `git commit`, `git merge-base` 등)이다. 사람 없이 돌리려면 이것을 프로젝트의 `.claude/settings.json`의 `permissions.allow`에 넣어 둔다. 따로 본보기 파일은 두지 않는다. 테스트·빌드 명령(`Bash(npm test *)` 등)과 소스 편집 권한은 프로젝트마다 다르므로 따로 추가한다. 빠진 권한은 실행 중 프롬프트로 뜨며 사람을 기다리게 만든다. `.claude/settings.json`의 권한 규칙은 그 저장소를 Claude Code에서 한 번 열어 신뢰(trust) 대화상자를 수락한 뒤에만 적용된다. 수락 전에는 무시되므로 `claude -p`로 돌릴 때는 `--allowedTools`로 직접 준다.
-2. **설정** — `.claude/orchestrate.config.json`. 키와 기본값은 `protocols/workspace.md` 2.3 "설정 파일".
-3. **언어와 도구** — 저장소 루트의 `CLAUDE.md`에 적는다. 언어·프레임워크, 테스트·빌드·린트 명령, 패키지 관리자. 에이전트가 작업을 시작할 때 읽는다. 코딩 관례는 여기가 아니라 `rules/`에 적는다(6번).
-4. **에이전트** — 다른 도구·모델·절차가 필요한 에이전트는 `/agent-builder`로 만든다. 유형(분석형·실행형·검증형)을 정하고 `description` 첫 문장에 맡는 대상을 적은 정의 파일 하나를 `.claude/agents/`에 두면 Orchestrator가 다음 epic부터 고른다. 이미 써 둔 에이전트 정의 파일을 가져와 CCForge의 규약에 맞춰 편입할 수도 있다. 그 프로젝트의 `.claude/`만 고친다.
-5. **워크플로 스킬** — 새 산출물 종류나 검증 관점에 따른 규칙(스택과 무관한 것)은 프로젝트의 `.claude/skills/<name>/SKILL.md`에 워크플로 스킬 하나로 추가한다(`/skill-builder`, 규격은 `protocols/skill-spec.md`). 에이전트별로 따로 쓸 것은 없다. 워크플로 스킬을 어떻게 쓰는지는 각 에이전트의 정의 파일에 이미 있다. 기본 제공 워크플로 스킬은 `code-structure`(코드)와 `doc-writing`(문서·명세)이며 같은 `.claude/skills/`에 있으므로 프로젝트에 맞게 직접 고쳐도 된다.
-6. **팀 규칙** — `.claude/rules/`에 `branch-convention.md`, `git-convention.md`, `coding-convention.md`(코딩 관례), 그 밖의 규칙 파일을 둔다. 코딩 관례 파일은 경로가 모든 Task에 실려 모든 에이전트가 읽는다. 없으면 기본 동작이다(`rules/README.md`). 파일 이름은 권장일 뿐이고 Orchestrator는 `rules/`의 모든 `*.md`를 읽어 내용으로 규칙을 찾는다. 브랜치 규칙이 어느 파일에도 없을 때만 첫 epic을 시작할 때 설문으로 묻고 답을 `branch-convention.md`로 저장한다.
+## FAQ
+
+<details>
+<summary><b><code>claude -p</code>(무인)로 돌릴 수 있나요?</b></summary>
+
+됩니다. 비대화형 세션에서는 agent teams가 팀원을 만들지 않으므로 자동으로 순차 방식으로 돕니다. 승인 단계에서 멈추지 않도록 `plan.require_approval: false`를 두고, `.claude/` 쓰기가 막히지 않도록 `--permission-mode auto`로 실행합니다.
+
+```bash
+claude -p "/lead <요구사항>" --permission-mode auto \
+  --allowedTools "Read" "Write" "Edit" "Glob" "Grep" "Agent" "Bash(git *)" "Bash(python3 *)" "Bash(jq *)" "Bash(mkdir *)" "Bash(mv *)" "Bash(echo *)" "Bash(date *)"
+```
+</details>
+
+<details>
+<summary><b>토큰을 얼마나 쓰나요?</b></summary>
+
+팀원마다 컨텍스트를 따로 쓰므로 팀 방식은 단일 세션보다 훨씬 많이 씁니다. 그래서 동시에 돌 일이 없으면 팀을 만들지 않고, 팀원 수를 `team.max_members`로 묶고, 관점 검토(보안 등)는 기본 검토 팀원이 함께 하며, 팀원을 epic 동안 유지해 같은 코드를 다시 읽지 않게 합니다.
+</details>
+
+<details>
+<summary><b>중간에 끊기면요?</b></summary>
+
+`/lead resume`. 팀원은 복구되지 않으므로(공식 제약) 팀장이 파일과 git으로 상태를 맞추고 팀원을 새로 만듭니다. 커밋된 것은 그대로 살리고, 커밋되지 않은 변경은 지우지 않고 stash에 둡니다.
+</details>
+
+<details>
+<summary><b>브랜치는 몇 개 생기나요?</b></summary>
+
+기본은 요청 하나에 브랜치 하나입니다. 요청에 나눠 달라고 하면 나눕니다. 기준을 말하지 않으면 분석원이 제안하고 확인을 받습니다. step 브랜치는 병합 뒤 지워집니다.
+</details>
+
+<details>
+<summary><b>제약이 있나요?</b></summary>
+
+- agent teams는 Claude Code의 실험 기능입니다. 동작이 바뀔 수 있습니다.
+- 같은 저장소에서 두 세션이 동시에 `/lead`를 실행하지 않습니다.
+- 브랜치(job) 사이의 병렬은 없습니다. 브랜치 안의 step만 병렬로 돕니다.
+- Windows는 Git Bash 또는 WSL이 필요합니다.
+- 작업 기록 형식 버전(`schema_version`)이 바뀌면 이전 epic은 `resume`할 수 없습니다.
+</details>
 
 ## 문서
 
-사람이 읽는 문서 (`docs/`. 실행 중에는 읽히지 않고, 실행되는 어떤 파일도 이쪽을 가리키지 않는다):
+| 읽는 사람 | 문서 |
+|---|---|
+| 처음 보는 사람 | 이 README |
+| 팀장(실행 중) | [`commands/lead.md`](commands/lead.md) |
+| 각 팀원(실행 중) | [`agents/`](agents/) — 자기 정의 파일 하나로 완결 |
+| 에이전트를 만드는 사람 | [`protocols/task-result.md`](protocols/task-result.md) |
+| 워크플로 스킬을 만드는 사람 | [`protocols/skill-spec.md`](protocols/skill-spec.md) |
 
-- 구조 개요: `docs/agent-architecture.md`
-- 에이전트 정의 규약과 정합성 규칙(CCForge를 고치는 사람용): `docs/agent-spec.md`
+## 참고
 
-실행 중에 읽히는 문서:
+CCForge의 팀 구조와 제약은 Anthropic의 글을 기준으로 맞췄습니다.
 
-- Orchestrator 절차: `commands/orchestrate.md`
-- 형식 정본: `protocols/` (작업 공간, Task/Result, payload, context, history)
-- 워크플로 스킬 규격: `protocols/skill-spec.md` (스킬 파일과 `/skill-builder`가 가리킨다)
-
-## 제약
-
-- Windows는 Git Bash 또는 WSL이 필요하다(Result 파일을 `mv`로 옮긴다).
-- 작업 공간 파일에는 형식 버전(`schema_version`)이 있다. CCForge를 업데이트해 버전이 올라가면 이전 버전으로 만든 epic은 `resume`할 수 없고 새 epic으로 이어가야 한다.
-- 같은 저장소에서 두 세션이 동시에 `/orchestrate`를 실행하지 않는다.
-- job 사이의 병렬(영역이 다른 job의 동시 진행)은 이 버전에 없다. job 안의 step 병렬만 있다.
-
-## 테스트
-
-```bash
-python3 tests/check_docs.py      # 문서 정합성 (문서를 고칠 때마다)
-bash tests/check_git.sh          # 문서가 지시하는 git 절차
-bash tests/e2e/setup_sample.sh <dir> && (cd <dir> && claude -p "/orchestrate ...") && python3 tests/e2e/verify.py <dir> --scenario fix
-```
+- [Orchestrate teams of Claude Code sessions](https://code.claude.com/docs/en/agent-teams.md) — agent teams 동작, 권장 팀 크기, 파일 소유 분리, 제약
+- [Hooks reference](https://code.claude.com/docs/en/hooks.md) — `TaskCompleted`, `TeammateIdle`
+- [How we built our multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system) — 리드-워커 구조, 작업 경계와 출력 형식을 분명히 주기
